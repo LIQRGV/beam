@@ -23,13 +23,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.testing.PAssert;
-import org.apache.beam.sdk.testing.RunnableOnService;
 import org.apache.beam.sdk.testing.TestPipeline;
 import org.apache.beam.sdk.transforms.Count;
 import org.apache.beam.sdk.transforms.SerializableFunction;
@@ -37,7 +37,6 @@ import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,14 +64,13 @@ public class RedisIOTest {
           public RedisService apply(PipelineOptions input) {
             return service;
           }
-        });
+        }, null);
     long estimatedSizeBytes = source.getEstimatedSizeBytes(pipelineOptions);
     LOG.info("Estimated size: {}", estimatedSizeBytes);
     assertEquals(100, estimatedSizeBytes);
   }
 
   @Test
-  @Category(RunnableOnService.class)
   public void testGetRead() throws Exception {
     FakeRedisService service = new FakeRedisService();
     for (int i = 0; i < 1000; i++) {
@@ -114,7 +112,7 @@ public class RedisIOTest {
     }
 
     @Override
-    public FakeRedisReader createReader(String keyPattern) throws IOException {
+    public FakeRedisReader createReader(String keyPattern, RedisNode node) throws IOException {
       return new FakeRedisReader(keyPattern);
     }
 
@@ -179,6 +177,21 @@ public class RedisIOTest {
         size += key.getBytes().length + value.getBytes().length;
       }
       return size;
+    }
+
+    @Override
+    public boolean isClusterEnabled() {
+      return false;
+    }
+
+    @Override
+    public List<RedisNode> getClusterNodes() {
+      return null;
+    }
+
+    @Override
+    public int getKeySlot(String key) {
+      return 0;
     }
 
   }

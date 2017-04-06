@@ -24,6 +24,7 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -58,7 +59,8 @@ import org.slf4j.LoggerFactory;
  * <pre>{@code
  *
  *  pipeline.apply(RedisIO.read()
- *    .withConnection(RedisConnection.create(Collections.singletonList("localhost:6379")))
+ *    .withConnectionConfiguration(
+ *      RedisConnectionConfiguration.create().withHost("localhost").withPort(6379))
  *    .withKeyPattern("foo*")
  *
  * }</pre>
@@ -68,8 +70,7 @@ public class RedisIO {
   private static final Logger LOG = LoggerFactory.getLogger(RedisIO.class);
 
   public static Read read() {
-    return new  AutoValue_RedisIO_Read.Builder()
-        .setCommand(Read.Command.GET).setKeyPattern("*").build();
+    return new  AutoValue_RedisIO_Read.Builder().build();
   }
 
   private RedisIO() {
@@ -81,15 +82,7 @@ public class RedisIO {
   @AutoValue
   public abstract static class Read extends PTransform<PBegin, PCollection<KV<String, String>>> {
 
-    /**
-     * The Redis commands related to read of key-value pairs.
-     */
-    public enum Command {
-      GET
-    }
-
-    @Nullable abstract RedisConnection connection();
-    @Nullable abstract Command command();
+    @Nullable abstract RedisConnectionConfiguration connectionConfiguration();
     @Nullable abstract String keyPattern();
     @Nullable abstract RedisService redisService();
 
@@ -97,45 +90,28 @@ public class RedisIO {
 
     @AutoValue.Builder
     abstract static class Builder {
-      @Nullable abstract Builder setConnection(RedisConnection connection);
-      @Nullable abstract Builder setCommand(Command command);
+      @Nullable abstract Builder setConnectionConfiguration(
+          RedisConnectionConfiguration connection);
       @Nullable abstract Builder setKeyPattern(String keyPattern);
       @Nullable abstract Builder setRedisService(RedisService redisService);
       abstract Read build();
     }
 
     /**
-     * Define the connection to the Redis server.
+     * Define the connectionConfiguration to the Redis server.
      *
-     * @param connection The {@link RedisConnection}.
+     * @param connection The {@link RedisConnectionConfiguration}.
      * @return The corresponding {@link Read} {@link PTransform}.
      */
-    public Read withConnection(RedisConnection connection) {
-      checkArgument(connection != null, "RedisIO.read().withConnection(connection) called with "
-          + "null connection");
-      return builder().setConnection(connection).build();
+    public Read withConnectionConfiguration(RedisConnectionConfiguration connection) {
+      checkArgument(connection != null, "RedisIO.read().withConnectionConfiguration"
+          + "(connectionConfiguration) called with null connectionConfiguration");
+      return builder().setConnectionConfiguration(connection).build();
     }
 
-    /**
-     * Define the Redis command to execute to retrieve the key/value pairs.
-     *
-     * @param command The Redis command.
-     * @return The corresponding {@link Read} {@link PTransform}.
-     */
-    public Read withCommand(Command command) {
-      checkArgument(command != null, "RedisIO.read().withCommand(command) called with null "
-          + "command");
-      return builder().setCommand(command).build();
-    }
-
-    /**
-     * Define the pattern to filter the Redis keys.
-     * @param keyPattern The filter key pattern.
-     * @return The corresponding {@link Read} {@link PTransform}.
-     */
     public Read withKeyPattern(String keyPattern) {
-      checkArgument(keyPattern != null, "RedisIO.read().withKeyPattern(pattern) called with "
-          + "null pattern");
+      checkArgument(keyPattern != null, "RedisIO.read().withKeyPattern(keyPattern) called with "
+          + "null keyPattern");
       return builder().setKeyPattern(keyPattern).build();
     }
 
@@ -153,21 +129,17 @@ public class RedisIO {
 
     @Override
     public void validate(PBegin input) {
-      checkState(connection() != null || redisService() != null, "RedisIO.read() requires a "
-          + "connection to be set withConnection(connection) or a service to be set "
-          + "withRedisService(service)");
-      checkState(command() != null,  "RedisIO.read() requires a command to be set via "
-          + "withCommand(command)");
-      checkState(keyPattern() != null, "RedisIO.read() requires a key pattern to be set via "
-          + "withKeyPattern(keyPattern");
+      checkState(connectionConfiguration() != null || redisService() != null,
+          "RedisIO.read() requires a connectionConfiguration to be set "
+              + "withConnection(connectionConfiguration) or a service to be set withRedisService"
+              + "(service)");
     }
 
     @Override
     public void populateDisplayData(DisplayData.Builder builder) {
-      if (connection() != null) {
-        connection().populateDisplayData(builder);
+      if (connectionConfiguration() != null) {
+        connectionConfiguration().populateDisplayData(builder);
       }
-      builder.addIfNotNull(DisplayData.item("command", command().toString()));
     }
 
     @Override
@@ -181,7 +153,7 @@ public class RedisIO {
                     public RedisService apply(PipelineOptions pipelineOptions) {
                       return getRedisService(pipelineOptions);
                     }
-                  })));
+                  }, null)));
     }
 
     /**
@@ -194,7 +166,7 @@ public class RedisIO {
       if (redisService() != null) {
         return redisService();
       }
-      return new RedisServiceImpl(connection());
+      return new RedisServiceImpl(connectionConfiguration());
     }
 
   }
@@ -202,22 +174,43 @@ public class RedisIO {
   /**
    * A bounded source reading key-value pairs from a Redis server.
    */
-  // visible for testing
+  @VisibleForTesting
   protected static class RedisSource extends BoundedSource<KV<String, String>> {
 
     private final String keyPattern;
     private final SerializableFunction<PipelineOptions, RedisService> serviceFactory;
+    private final RedisService.RedisNode node;
 
     protected RedisSource(String keyPattern,
-                          SerializableFunction<PipelineOptions, RedisService> serviceFactory) {
+                          SerializableFunction<PipelineOptions, RedisService> serviceFactory,
+                          RedisService.RedisNode node) {
       this.keyPattern = keyPattern;
       this.serviceFactory = serviceFactory;
+      this.node = node;
     }
 
     @Override
     public List<RedisSource> splitIntoBundles(long desiredBundleSizeBytes,
-                                              PipelineOptions pipelineOptions) {
-      // TODO cluster with one source per slot
+                                              PipelineOptions pipelineOptions) throws IOException {
+      if (serviceFactory.apply(pipelineOptions).isClusterEnabled()) {
+        LOG.info("Cluster detected");
+        List<RedisSource> redisSources = new ArrayList<>();
+
+        List<RedisService.RedisNode> nodes = serviceFactory.apply(pipelineOptions)
+            .getClusterNodes();
+
+        int slot = serviceFactory.apply(pipelineOptions).getKeySlot(keyPattern);
+
+        for (RedisService.RedisNode node : nodes) {
+          if (node.startSlot < slot && node.endSlot > slot) {
+            redisSources.add(new RedisSource(keyPattern, serviceFactory, node));
+          }
+        }
+
+        return redisSources;
+      }
+      LOG.info("Standalone instance detected, use a single source");
+      // we don't have Redis cluster, so, we use an unique source
       return Collections.singletonList(this);
     }
 
@@ -230,7 +223,7 @@ public class RedisIO {
      * @return The estimated size of the Redis database in bytes.
      */
     @Override
-    public long getEstimatedSizeBytes(PipelineOptions pipelineOptions) throws Exception {
+    public long getEstimatedSizeBytes(PipelineOptions pipelineOptions) throws IOException {
       return serviceFactory.apply(pipelineOptions).getEstimatedSizeBytes();
     }
 
@@ -264,7 +257,7 @@ public class RedisIO {
 
     @Override
     public boolean start() throws IOException {
-      reader = service.createReader(source.keyPattern);
+      reader = service.createReader(source.keyPattern, source.node);
       return reader.start();
     }
 

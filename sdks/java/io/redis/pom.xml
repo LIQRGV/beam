@@ -28,11 +28,7 @@
 
   <artifactId>beam-sdks-java-io-redis</artifactId>
   <name>Apache Beam :: SDKs :: Java :: IO :: Redis</name>
-  <description>IO to send and receive messages from Redis. Redis is advanced key-value
-    store where keys can contain strings, hashes, lists, sets and sorted sets. In
-    addition it provides pub/sub functionality for inter-app communications. The IO
-    provides a Write PTransform for executing commands, Read PTransform for
-    subscribing to pub/sub messages.</description>
+  <description>IO to read and write on a Redis keystore.</description>
 
   <dependencies>
     <dependency>

@@ -19,39 +19,55 @@ package org.apache.beam.sdk.io.redis;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
 import org.apache.beam.sdk.values.KV;
 
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.Pipeline;
+import redis.clients.jedis.Response;
+import redis.clients.util.JedisClusterCRC16;
 
 /**
  * An implementation of the {@link RedisService} that actually communicates with a Redis server.
  */
 public class RedisServiceImpl implements RedisService {
 
-  private final RedisConnection connection;
+  private final RedisConnectionConfiguration connection;
 
-  public RedisServiceImpl(RedisConnection connection) {
+  public RedisServiceImpl(RedisConnectionConfiguration connection) {
     this.connection = connection;
   }
 
   private class RedisReaderImpl implements Reader {
 
     private final String keyPattern;
+    private final RedisNode node;
+
     private Jedis jedis;
     private Iterator<String> keysIterator;
     private KV<String, String> current;
 
-    public RedisReaderImpl(String keyPattern) {
+    public RedisReaderImpl(String keyPattern, RedisNode node) {
       this.keyPattern = keyPattern;
+      this.node = node;
     }
 
     @Override
     public boolean start() {
-      jedis = connection.connect();
-      Set<String> keys = jedis.keys(keyPattern);
+      if (node.host != null) {
+        jedis = new Jedis(node.host, node.port, connection.timeout());
+      } else {
+        jedis = connection.connect();
+      }
+      Pipeline pipeline = jedis.pipelined();
+      Response<Set<String>> keysResponse = pipeline.keys(keyPattern);
+      pipeline.syncAndReturnAll();
+
+      Set<String> keys = keysResponse.get();
+
       keysIterator = keys.iterator();
       return advance();
     }
@@ -84,16 +100,14 @@ public class RedisServiceImpl implements RedisService {
   }
 
   @Override
-  public Reader createReader(String keyPattern) throws IOException {
-    return new RedisReaderImpl(keyPattern);
+  public Reader createReader(String keyPattern, RedisNode node) throws IOException {
+    return new RedisReaderImpl(keyPattern, node);
   }
 
   /**
    * The estimate size bytes is based on sampling, computing average size of 10 random
    * key/value pairs. This sampling average size is used with the Redis dbSize to get an
    * estimation of the actual database size.
-   *
-   * @return The estimated size of the Redis database in bytes.
    */
   @Override
   public long getEstimatedSizeBytes() {
@@ -115,6 +129,21 @@ public class RedisServiceImpl implements RedisService {
     long dbSize = jedis.dbSize();
     jedis.quit();
     return dbSize * samplingAverage;
+  }
+
+  @Override
+  public boolean isClusterEnabled() {
+    return connection.isClusterEnabled();
+  }
+
+  @Override
+  public List<RedisNode> getClusterNodes() {
+    return connection.getClusterNodes();
+  }
+
+  @Override
+  public int getKeySlot(String key) {
+    return JedisClusterCRC16.getSlot(key);
   }
 
 }

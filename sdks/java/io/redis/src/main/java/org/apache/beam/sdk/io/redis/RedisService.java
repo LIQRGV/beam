@@ -19,6 +19,7 @@ package org.apache.beam.sdk.io.redis;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 import org.apache.beam.sdk.values.KV;
@@ -34,7 +35,7 @@ interface RedisService extends Serializable {
   interface Reader {
 
     /**
-     * Init the reader, including network connection and so.
+     * Init the reader, including network connectionConfiguration and so.
      */
     boolean start() throws IOException;
 
@@ -59,13 +60,41 @@ interface RedisService extends Serializable {
   /**
    * Returns a {@link Reader} that will read from the specified source.
    */
-  Reader createReader(String keyPattern) throws IOException;
+  Reader createReader(String keyPattern, RedisNode node) throws IOException;
 
   /**
    * Return an estimation of the size that could be read.
-   *
-   * @return The estimated size in bytes.
    */
   long getEstimatedSizeBytes();
+
+  /**
+   * Return true if the Redis instance support cluster, false, else.
+   */
+  boolean isClusterEnabled();
+
+  /**
+   * Return the list of Redis cluster nodes.
+   */
+  List<RedisNode> getClusterNodes();
+
+  /**
+   * Return the slot for a given key or pattern.
+   */
+  int getKeySlot(String key);
+
+  /**
+   * Describe a Redis node including the slot.
+   */
+  class RedisNode {
+
+    public String host;
+    public int port;
+    public int timeout;
+    public int startSlot;
+    public int endSlot;
+    public int index;
+    public long size;
+
+  }
 
 }
