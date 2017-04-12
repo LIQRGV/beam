@@ -116,7 +116,8 @@ public class RedisIO {
     }
 
     /**
-     * Define the Redis service to use.
+     * Allows the user to specify its own {@link RedisService}. A {@link RedisService} is
+     * responsible of reading and writing data with the Redis backend.
      *
      * @param redisService The {@link RedisService} to use.
      * @return The corresponding {@link Read} {@link PTransform}.
