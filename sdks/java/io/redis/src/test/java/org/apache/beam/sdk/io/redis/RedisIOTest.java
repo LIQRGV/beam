@@ -19,7 +19,6 @@ package org.apache.beam.sdk.io.redis;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -27,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.testing.PAssert;
@@ -112,18 +112,18 @@ public class RedisIOTest {
     }
 
     @Override
-    public FakeRedisReader createReader(String keyPattern, RedisNode node) throws IOException {
-      return new FakeRedisReader(keyPattern);
+    public FakeRedisReader createReader(RedisIO.RedisSource source) {
+      return new FakeRedisReader(source);
     }
 
-    static class FakeRedisReader implements Reader {
+    static class FakeRedisReader extends BoundedSource.BoundedReader<KV<String, String>> {
 
-      private final String keyPattern;
+      private final RedisIO.RedisSource source;
       private Iterator<String> keysIterator;
       private KV<String, String> current;
 
-      public FakeRedisReader(String keyPattern) {
-        this.keyPattern = keyPattern;
+      public FakeRedisReader(RedisIO.RedisSource source) {
+        this.source = source;
       }
 
       @Override
@@ -136,8 +136,8 @@ public class RedisIOTest {
       public boolean advance() {
         if (keysIterator.hasNext()) {
           String key = keysIterator.next();
-          if (keyPattern != null && !keyPattern.equals("*")) {
-            if (!key.matches(keyPattern)) {
+          if (source.keyPattern != null && !source.keyPattern.equals("*")) {
+            if (!key.matches(source.keyPattern)) {
               return false;
             }
           }
@@ -161,6 +161,11 @@ public class RedisIOTest {
           throw new NoSuchElementException();
         }
         return current;
+      }
+
+      @Override
+      public RedisIO.RedisSource getCurrentSource() {
+        return  source;
       }
 
     }

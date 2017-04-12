@@ -24,21 +24,14 @@ import com.google.auto.value.AutoValue;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import javax.annotation.Nullable;
 
 import org.apache.beam.sdk.transforms.display.DisplayData;
 
-import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.Protocol;
-import redis.clients.jedis.Response;
-import redis.clients.util.JedisClusterCRC16;
 import redis.clients.util.SafeEncoder;
 
 /**
@@ -48,7 +41,7 @@ import redis.clients.util.SafeEncoder;
 @AutoValue
 public abstract class RedisConnectionConfiguration implements Serializable {
 
-  private final static int MASTER_NODE_INDEX = 2;
+  private static final int MASTER_NODE_INDEX = 2;
 
   @Nullable abstract String host();
   abstract int port();

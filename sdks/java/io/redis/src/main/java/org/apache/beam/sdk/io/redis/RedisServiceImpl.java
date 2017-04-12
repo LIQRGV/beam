@@ -17,12 +17,12 @@
  */
 package org.apache.beam.sdk.io.redis;
 
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
+import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.values.KV;
 
 import redis.clients.jedis.Jedis;
@@ -41,29 +41,27 @@ public class RedisServiceImpl implements RedisService {
     this.connection = connection;
   }
 
-  private class RedisReaderImpl implements Reader {
+  private class RedisReaderImpl extends BoundedSource.BoundedReader<KV<String, String>> {
 
-    private final String keyPattern;
-    private final RedisNode node;
+    private final RedisIO.RedisSource source;
 
     private Jedis jedis;
     private Iterator<String> keysIterator;
     private KV<String, String> current;
 
-    public RedisReaderImpl(String keyPattern, RedisNode node) {
-      this.keyPattern = keyPattern;
-      this.node = node;
+    public RedisReaderImpl(RedisIO.RedisSource source) {
+      this.source = source;
     }
 
     @Override
     public boolean start() {
-      if (node.host != null) {
-        jedis = new Jedis(node.host, node.port, connection.timeout());
+      if (source.node.host != null) {
+        jedis = new Jedis(source.node.host, source.node.port, connection.timeout());
       } else {
         jedis = connection.connect();
       }
       Pipeline pipeline = jedis.pipelined();
-      Response<Set<String>> keysResponse = pipeline.keys(keyPattern);
+      Response<Set<String>> keysResponse = pipeline.keys(source.keyPattern);
       pipeline.syncAndReturnAll();
 
       Set<String> keys = keysResponse.get();
@@ -97,11 +95,16 @@ public class RedisServiceImpl implements RedisService {
       return current;
     }
 
+    @Override
+    public BoundedSource<KV<String, String>> getCurrentSource() {
+      return source;
+    }
+
   }
 
   @Override
-  public Reader createReader(String keyPattern, RedisNode node) throws IOException {
-    return new RedisReaderImpl(keyPattern, node);
+  public RedisReaderImpl createReader(RedisIO.RedisSource source) {
+    return new RedisReaderImpl(source);
   }
 
   /**

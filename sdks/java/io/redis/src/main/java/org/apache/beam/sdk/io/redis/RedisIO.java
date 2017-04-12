@@ -178,9 +178,9 @@ public class RedisIO {
   @VisibleForTesting
   protected static class RedisSource extends BoundedSource<KV<String, String>> {
 
-    private final String keyPattern;
+    protected final String keyPattern;
     private final SerializableFunction<PipelineOptions, RedisService> serviceFactory;
-    private final RedisService.RedisNode node;
+    protected final RedisService.RedisNode node;
 
     protected RedisSource(String keyPattern,
                           SerializableFunction<PipelineOptions, RedisService> serviceFactory,
@@ -230,7 +230,7 @@ public class RedisIO {
 
     @Override
     public BoundedReader<KV<String, String>> createReader(PipelineOptions pipelineOptions) {
-      return new RedisReader(this, serviceFactory.apply(pipelineOptions));
+      return serviceFactory.apply(pipelineOptions).createReader(this);
     }
 
     @Override
@@ -241,46 +241,6 @@ public class RedisIO {
     @Override
     public Coder<KV<String, String>> getDefaultOutputCoder() {
       return KvCoder.of(StringUtf8Coder.of(), StringUtf8Coder.of());
-    }
-
-  }
-
-  private static class RedisReader extends BoundedSource.BoundedReader<KV<String, String>> {
-
-    private final RedisSource source;
-    private final RedisService service;
-    private RedisService.Reader reader;
-
-    public RedisReader(RedisSource source, RedisService service) {
-      this.source = source;
-      this.service = service;
-    }
-
-    @Override
-    public boolean start() throws IOException {
-      reader = service.createReader(source.keyPattern, source.node);
-      return reader.start();
-    }
-
-    @Override
-    public boolean advance() throws IOException {
-      return reader.advance();
-    }
-
-    @Override
-    public void close() throws IOException {
-      reader.close();
-      reader = null;
-    }
-
-    @Override
-    public KV<String, String> getCurrent() {
-      return reader.getCurrent();
-    }
-
-    @Override
-    public RedisSource getCurrentSource() {
-      return source;
     }
 
   }
