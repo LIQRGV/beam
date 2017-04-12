@@ -72,9 +72,12 @@ public class RedisIOTest {
 
   @Test
   public void testGetRead() throws Exception {
+    ArrayList<KV<String, String>> expected = new ArrayList<>();
     FakeRedisService service = new FakeRedisService();
     for (int i = 0; i < 1000; i++) {
-      service.put("Key " + i, "Value " + i);
+      KV<String, String> kv = KV.of("Key" + i, "Value " + i);
+      service.put(kv.getKey(), kv.getValue());
+      expected.add(kv);
     }
 
     PCollection<KV<String, String>> output =
@@ -82,11 +85,6 @@ public class RedisIOTest {
 
     PAssert.thatSingleton(output.apply("Count", Count.<KV<String, String>>globally()))
         .isEqualTo(1000L);
-    ArrayList<KV<String, String>> expected = new ArrayList<>();
-    for (int i = 0; i < 1000; i++) {
-      KV<String, String> kv = KV.of("Key " + i, "Value " + i);
-      expected.add(kv);
-    }
     PAssert.that(output).containsInAnyOrder(expected);
 
     pipeline.run();
@@ -173,11 +171,7 @@ public class RedisIOTest {
     @Override
     public long getEstimatedSizeBytes() {
       long size = 0L;
-      Iterator<String> keysIterator = store.keySet().iterator();
-      long count = 0;
-      while (keysIterator.hasNext() && count < 10) {
-        count++;
-        String key = keysIterator.next();
+      for (String key : store.keySet()) {
         String value = store.get(key);
         size += key.getBytes().length + value.getBytes().length;
       }
