@@ -117,21 +117,24 @@ public class RedisServiceImpl implements RedisService {
     Jedis jedis = connection.connect();
     // estimate the size of a key/value pair using sampling
     long samplingSize = 0;
-    for (int i = 0; i < 10; i++) {
-      String key = jedis.randomKey();
-      if (key != null) {
-        samplingSize = samplingSize + key.getBytes().length;
-        String value = jedis.get(key);
-        if (value != null) {
-          samplingSize = samplingSize + value.getBytes().length;
+    try {
+      for (int i = 0; i < 10; i++) {
+        String key = jedis.randomKey();
+        if (key != null) {
+          samplingSize = samplingSize + key.getBytes().length;
+          String value = jedis.get(key);
+          if (value != null) {
+            samplingSize = samplingSize + value.getBytes().length;
+          }
         }
       }
+      long samplingAverage = samplingSize / 10;
+      // db size
+      long dbSize = jedis.dbSize();
+      return dbSize * samplingAverage;
+    } finally {
+      jedis.quit();
     }
-    long samplingAverage = samplingSize / 10;
-    // db size
-    long dbSize = jedis.dbSize();
-    jedis.quit();
-    return dbSize * samplingAverage;
   }
 
   @Override
