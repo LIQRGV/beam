@@ -191,7 +191,7 @@ public class RedisIO {
     }
 
     @Override
-    public List<RedisSource> splitIntoBundles(long desiredBundleSizeBytes,
+    public List<RedisSource> split(long desiredBundleSizeBytes,
                                               PipelineOptions pipelineOptions) throws IOException {
       if (serviceFactory.apply(pipelineOptions).isClusterEnabled()) {
         LOG.info("Cluster detected");
