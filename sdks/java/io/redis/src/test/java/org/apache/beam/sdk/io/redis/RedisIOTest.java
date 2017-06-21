@@ -19,6 +19,8 @@ package org.apache.beam.sdk.io.redis;
 
 import static org.junit.Assert.assertEquals;
 
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -40,6 +42,9 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import redis.clients.jedis.Jedis;
+import redis.embedded.RedisServer;
+
 /**
  * Test on the Redis IO.
  */
@@ -50,7 +55,7 @@ public class RedisIOTest {
   @Rule public TestPipeline pipeline = TestPipeline.create();
 
   @Test
-  public void testEstimatedSizeBytes() throws Exception {
+  public void testMockEstimatedSizeBytes() throws Exception {
     final FakeRedisService service = new FakeRedisService();
     service.clear();
     for (int i = 0; i < 10; i++) {
@@ -71,11 +76,11 @@ public class RedisIOTest {
   }
 
   @Test
-  public void testGetRead() throws Exception {
+  public void testMockGetRead() throws Exception {
     ArrayList<KV<String, String>> expected = new ArrayList<>();
     FakeRedisService service = new FakeRedisService();
     for (int i = 0; i < 1000; i++) {
-      KV<String, String> kv = KV.of("Key" + i, "Value " + i);
+      KV<String, String> kv = KV.of("Key " + i, "Value " + i);
       service.put(kv.getKey(), kv.getValue());
       expected.add(kv);
     }
@@ -89,6 +94,86 @@ public class RedisIOTest {
 
     pipeline.run();
   }
+
+  @Test
+  public void testConcreteEstimatedSizeBytes() throws Exception {
+    try (EmbeddedRedis embeddedRedis = new EmbeddedRedis()) {
+      Jedis jedis = new Jedis("localhost", embeddedRedis.getPort());
+      for (int i = 0; i < 10; i++) {
+        jedis.set("Foo " + i, "Bar " + i);
+      }
+
+      PipelineOptions pipelineOptions = PipelineOptionsFactory.create();
+      final RedisConnectionConfiguration connectionConfiguration = RedisConnectionConfiguration
+          .create()
+          .withHost("localhost")
+          .withPort(embeddedRedis.getPort());
+      RedisIO.RedisSource source = new RedisIO.RedisSource("Foo.*",
+          new SerializableFunction<PipelineOptions, RedisService>() {
+            @Override
+            public RedisService apply(PipelineOptions input) {
+              return new RedisServiceImpl(connectionConfiguration);
+            }
+          }, null);
+      long estimatedSizeBytes = source.getEstimatedSizeBytes(pipelineOptions);
+      LOG.info("Estimated size: {}", estimatedSizeBytes);
+      assertEquals(100, estimatedSizeBytes);
+    }
+  }
+
+  @Test
+  public void testConcreteGetRead() throws Exception {
+    try (EmbeddedRedis embeddedRedis = new EmbeddedRedis()) {
+      ArrayList<KV<String, String>> expected = new ArrayList<>();
+      Jedis jedis = new Jedis("localhost", embeddedRedis.getPort());
+      for (int i = 0; i < 1000; i++) {
+        KV<String, String> kv = KV.of("Key " + i, "Value " + i);
+        jedis.set(kv.getKey(), kv.getValue());
+        expected.add(kv);
+      }
+      jedis.quit();
+
+      PCollection<KV<String, String>> read = pipeline.apply(
+          RedisIO.read()
+              .withConnectionConfiguration(RedisConnectionConfiguration.create()
+                  .withHost("localhost")
+                  .withPort(embeddedRedis.getPort())));
+
+      PAssert.thatSingleton(read.apply("Count", Count.<KV<String, String>>globally()))
+          .isEqualTo(1000L);
+      PAssert.that(read).containsInAnyOrder(expected);
+
+      pipeline.run();
+    }
+  }
+
+  /**
+   * Simple embedded Redis instance wrapper to control Redis server.
+   */
+  private static class EmbeddedRedis implements AutoCloseable {
+
+    private final int port;
+    private final RedisServer redisServer;
+
+    public EmbeddedRedis() throws IOException {
+      try (ServerSocket serverSocket = new ServerSocket(0)) {
+        port = serverSocket.getLocalPort();
+      }
+      redisServer = new RedisServer(port);
+      redisServer.start();
+    }
+
+    public int getPort() {
+      return this.port;
+    }
+
+    @Override
+    public void close() {
+      redisServer.stop();
+    }
+
+  }
+
 
   /**
    * A {@link RedisService} implementation that stores key/value pairs in memory.

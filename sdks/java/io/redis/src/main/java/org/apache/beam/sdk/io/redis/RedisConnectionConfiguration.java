@@ -155,6 +155,7 @@ public abstract class RedisConnectionConfiguration implements Serializable {
           node.endSlot = endSlot;
           node.index = i;
           node.size = slotInfo.size() - 2;
+          nodes.add(node);
         }
       }
     }

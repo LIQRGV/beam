@@ -129,7 +129,7 @@ public class RedisIO {
     }
 
     @Override
-    public void validate(PBegin input) {
+    public void validate(PipelineOptions pipelineOptions) {
       checkState(connectionConfiguration() != null || redisService() != null,
           "RedisIO.read() requires a connectionConfiguration to be set "
               + "withConnection(connectionConfiguration) or a service to be set withRedisService"

@@ -55,13 +55,18 @@ public class RedisServiceImpl implements RedisService {
 
     @Override
     public boolean start() {
-      if (source.node.host != null) {
+      if (source.node != null && source.node.host != null) {
         jedis = new Jedis(source.node.host, source.node.port, connection.timeout());
       } else {
         jedis = connection.connect();
       }
       Pipeline pipeline = jedis.pipelined();
-      Response<Set<String>> keysResponse = pipeline.keys(source.keyPattern);
+      Response<Set<String>> keysResponse;
+      if (source.keyPattern == null) {
+        keysResponse = pipeline.keys("*");
+      } else {
+        keysResponse = pipeline.keys(source.keyPattern);
+      }
       pipeline.syncAndReturnAll();
 
       Set<String> keys = keysResponse.get();

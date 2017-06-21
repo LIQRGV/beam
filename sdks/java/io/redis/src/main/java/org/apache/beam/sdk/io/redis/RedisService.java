@@ -57,7 +57,7 @@ interface RedisService extends Serializable {
   /**
    * Describe a Redis node including the slot.
    */
-  class RedisNode {
+  class RedisNode implements Serializable {
 
     public String host;
     public int port;
