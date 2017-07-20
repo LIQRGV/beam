@@ -136,7 +136,7 @@ public abstract class RedisConnectionConfiguration implements Serializable {
     builder.addIfNotNull(DisplayData.item("timeout", timeout()));
   }
 
-  public List<RedisService.RedisNode> getNodes() throws Exception {
+  public List<RedisService.RedisNode> getNodes() {
     if (this.isClusterEnabled()) {
       return getClusterNodes();
     }
@@ -145,6 +145,14 @@ public abstract class RedisConnectionConfiguration implements Serializable {
 
   public List<RedisService.RedisNode> getClusterNodes() {
     try (Jedis jedis = connect()) {
+      // cluster slots is an array containing for each slot
+      // - start slot range
+      // - end slot range
+      // - master for slot range represented as nested IP/port array
+      // - first replica of master for slot range
+      // - second replica
+      // - ...continues until all replicas for this master are returned
+      // See https://redis.io/commands/cluster-slots for details
       List<Object> slots = jedis.clusterSlots();
 
       for (Object slotInfoObj : slots) {
