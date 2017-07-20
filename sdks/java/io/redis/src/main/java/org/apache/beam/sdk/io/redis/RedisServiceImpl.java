@@ -18,12 +18,14 @@
 package org.apache.beam.sdk.io.redis;
 
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.values.KV;
 
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.ScanResult;
 import redis.clients.util.JedisClusterCRC16;
@@ -47,7 +49,10 @@ public class RedisServiceImpl implements RedisService {
     private ScanParams scanParams;
     private ScanResult<String> scanResult;
     private String nextCursor;
-    private Iterator<String> keysIterator;
+    private List<String> keys;
+    private Pipeline pipeline;
+    private List<KV<String, String>> batch;
+    private Iterator<KV<String, String>> batchIterator;
     private KV<String, String> current;
 
     public RedisReaderImpl(RedisIO.RedisSource source) {
@@ -69,28 +74,39 @@ public class RedisServiceImpl implements RedisService {
 
       scanResult = jedis.scan("0", scanParams);
       nextCursor = scanResult.getStringCursor();
-      keysIterator = scanResult.getResult().iterator();
+      keys = scanResult.getResult();
+      pipeline = jedis.pipelined();
 
       return advance();
     }
 
     @Override
     public boolean advance() {
-      if (keysIterator.hasNext()) {
-        String key = keysIterator.next();
-        String value = jedis.get(key);
-        KV<String, String> kv = KV.of(key, value);
-        current = kv;
+      if (batchIterator != null && batchIterator.hasNext()) {
+        current = batchIterator.next();
         return true;
       } else {
-        if (nextCursor.equals("0")) {
-          return false;
+        if (keys != null) {
+          batch = new LinkedList<>();
+          for (String key : keys) {
+            pipeline.get(key);
+          }
+          List<Object> values = pipeline.syncAndReturnAll();
+          for (int i = 0; i < values.size(); i++) {
+            batch.add(KV.of(keys.get(i), (String) values.get(i)));
+          }
+          batchIterator = batch.iterator();
+          if (!nextCursor.equals("0")) {
+            scanResult = jedis.scan(nextCursor, scanParams);
+            nextCursor = scanResult.getStringCursor();
+            keys = scanResult.getResult();
+          } else {
+            keys = null;
+          }
+          return advance();
         }
-        scanResult = jedis.scan(nextCursor, scanParams);
-        nextCursor = scanResult.getStringCursor();
-        keysIterator = scanResult.getResult().iterator();
-        return advance();
       }
+      return false;
     }
 
     @Override
