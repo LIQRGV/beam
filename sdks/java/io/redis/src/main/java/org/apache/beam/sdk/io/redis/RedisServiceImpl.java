@@ -65,11 +65,7 @@ public class RedisServiceImpl implements RedisService {
       }
       Pipeline pipeline = jedis.pipelined();
       Response<Set<String>> keysResponse;
-      if (source.keyPattern == null) {
-        keysResponse = pipeline.keys("*");
-      } else {
-        keysResponse = pipeline.keys(source.keyPattern);
-      }
+      keysResponse = pipeline.keys(source.keyPattern);
       pipeline.syncAndReturnAll();
 
       Set<String> keys = keysResponse.get();

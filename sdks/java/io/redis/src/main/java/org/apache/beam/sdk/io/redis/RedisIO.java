@@ -70,7 +70,7 @@ public class RedisIO {
   private static final Logger LOG = LoggerFactory.getLogger(RedisIO.class);
 
   public static Read read() {
-    return new  AutoValue_RedisIO_Read.Builder().build();
+    return new  AutoValue_RedisIO_Read.Builder().setKeyPattern("*").build();
   }
 
   private RedisIO() {
@@ -109,6 +109,12 @@ public class RedisIO {
       return builder().setConnectionConfiguration(connection).build();
     }
 
+    /**
+     * Define the pattern of the Redis keys to retrieve.
+     *
+     * @param keyPattern The Redis key pattern.
+     * @return The corresponding {@link Read} {@link PTransform}.
+     */
     public Read withKeyPattern(String keyPattern) {
       checkArgument(keyPattern != null, "RedisIO.read().withKeyPattern(keyPattern) called with "
           + "null keyPattern");
@@ -134,6 +140,8 @@ public class RedisIO {
           "RedisIO.read() requires a connectionConfiguration to be set "
               + "withConnection(connectionConfiguration) or a service to be set withRedisService"
               + "(service)");
+      checkState(keyPattern() != null, "RedisIO.read() requires a key pattern to be set "
+          + "withKeyPattern(keyPattern)");
     }
 
     @Override
@@ -141,6 +149,7 @@ public class RedisIO {
       if (connectionConfiguration() != null) {
         connectionConfiguration().populateDisplayData(builder);
       }
+      builder.add(DisplayData.item("keyPattern", keyPattern()));
     }
 
     @Override
@@ -203,7 +212,7 @@ public class RedisIO {
         int slot = serviceFactory.apply(pipelineOptions).getKeySlot(keyPattern);
 
         for (RedisService.RedisNode node : nodes) {
-          if (node.startSlot < slot && node.endSlot > slot) {
+          if (node.startSlot <= slot && slot < node.endSlot) {
             redisSources.add(new RedisSource(keyPattern, serviceFactory, node));
           }
         }
