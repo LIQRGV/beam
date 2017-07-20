@@ -92,7 +92,11 @@ public abstract class RedisConnectionConfiguration implements Serializable {
    * Connect to the Redis instance.
    */
   public Jedis connect() {
-    return new Jedis(host(), port(), timeout());
+    Jedis jedis = new Jedis(host(), port(), timeout());
+    if (auth() != null) {
+      jedis.auth(auth());
+    }
+    return jedis;
   }
 
   protected boolean isClusterEnabled() {

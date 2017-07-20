@@ -57,6 +57,9 @@ public class RedisServiceImpl implements RedisService {
     public boolean start() {
       if (source.node != null && source.node.host != null) {
         jedis = new Jedis(source.node.host, source.node.port, connection.timeout());
+        if (connection.auth() != null) {
+          jedis.auth(connection.auth());
+        }
       } else {
         jedis = connection.connect();
       }
