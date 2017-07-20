@@ -147,6 +147,33 @@ public class RedisIOTest {
     }
   }
 
+  @Test
+  public void testConnectionInfiniteTimeout() throws Exception {
+    try (EmbeddedRedis embeddedRedis = new EmbeddedRedis()) {
+      ArrayList<KV<String, String>> expected = new ArrayList<>();
+      Jedis jedis = new Jedis("localhost", embeddedRedis.getPort());
+      for (int i = 0; i < 1000; i++) {
+        KV<String, String> kv = KV.of("Key " + i, "Value " + i);
+        jedis.set(kv.getKey(), kv.getValue());
+        expected.add(kv);
+      }
+      jedis.quit();
+
+      PCollection<KV<String, String>> read = pipeline.apply(
+          RedisIO.read()
+              .withConnectionConfiguration(RedisConnectionConfiguration.create()
+                  .withHost("localhost")
+                  .withPort(embeddedRedis.getPort())
+                  .withTimeout(0)));
+
+      PAssert.thatSingleton(read.apply("Count", Count.<KV<String, String>>globally()))
+          .isEqualTo(1000L);
+      PAssert.that(read).containsInAnyOrder(expected);
+
+      pipeline.run();
+    }
+  }
+
   /**
    * Simple embedded Redis instance wrapper to control Redis server.
    */

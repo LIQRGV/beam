@@ -66,25 +66,39 @@ public abstract class RedisConnectionConfiguration implements Serializable {
         .setTimeout(Protocol.DEFAULT_TIMEOUT).build();
   }
 
+  /**
+   * Define the host name of the Redis server.
+   */
   public RedisConnectionConfiguration withHost(String host) {
     checkArgument(host != null, "RedisConnectionConfiguration.create().withHost(host) called "
         + "with empty host");
     return builder().setHost(host).build();
   }
 
+  /**
+   * Define the port number of the Redis server.
+   */
   public RedisConnectionConfiguration withPort(int port) {
     checkArgument(port > 0, "RedisConnectionConfiguration.create().withPort(port) called with "
         + "invalid port number (" + port + ")");
     return builder().setPort(port).build();
   }
 
+  /**
+   * Define the password to authenticate on the Redis server.
+   */
   public RedisConnectionConfiguration withAuth(String auth) {
     checkArgument(auth != null, "RedisConnectionConfiguration.create().withAuth(auth) called "
         + "with null auth");
     return builder().setAuth(auth).build();
   }
 
+  /**
+   * Define the Redis connection timeout. A timeout of zero is interpreted as an infinite timeout.
+   */
   public RedisConnectionConfiguration withTimeout(int timeout) {
+    checkArgument(timeout >= 0, "RedisConnectionConfiguration.create().withTimeout(timeout) "
+        + "called with negative timeout");
     return builder().setTimeout(timeout).build();
   }
 
