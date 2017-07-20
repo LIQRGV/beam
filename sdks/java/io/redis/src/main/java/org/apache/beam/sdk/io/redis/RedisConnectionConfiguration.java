@@ -158,8 +158,8 @@ public abstract class RedisConnectionConfiguration implements Serializable {
       for (Object slotInfoObj : slots) {
         List<Object> slotInfo = (List<Object>) slotInfoObj;
 
-        int startSlot = Integer.parseInt(slotInfo.get(0).toString());
-        int endSlot = Integer.parseInt(slotInfo.get(1).toString());
+        int startSlot = Integer.parseInt((String) slotInfo.get(0));
+        int endSlot = Integer.parseInt((String) slotInfo.get(1));
 
         if (slotInfo.size() <= MASTER_NODE_INDEX) {
           continue;

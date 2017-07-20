@@ -20,14 +20,12 @@ package org.apache.beam.sdk.io.redis;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Set;
-
 import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.values.KV;
 
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.Pipeline;
-import redis.clients.jedis.Response;
+import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.ScanResult;
 import redis.clients.util.JedisClusterCRC16;
 
 /**
@@ -46,6 +44,9 @@ public class RedisServiceImpl implements RedisService {
     private final RedisIO.RedisSource source;
 
     private Jedis jedis;
+    private ScanParams scanParams;
+    private ScanResult<String> scanResult;
+    private String nextCursor;
     private Iterator<String> keysIterator;
     private KV<String, String> current;
 
@@ -63,14 +64,13 @@ public class RedisServiceImpl implements RedisService {
       } else {
         jedis = connection.connect();
       }
-      Pipeline pipeline = jedis.pipelined();
-      Response<Set<String>> keysResponse;
-      keysResponse = pipeline.keys(source.keyPattern);
-      pipeline.syncAndReturnAll();
+      scanParams = new ScanParams();
+      scanParams.match(source.keyPattern);
 
-      Set<String> keys = keysResponse.get();
+      scanResult = jedis.scan("0", scanParams);
+      nextCursor = scanResult.getStringCursor();
+      keysIterator = scanResult.getResult().iterator();
 
-      keysIterator = keys.iterator();
       return advance();
     }
 
@@ -82,8 +82,15 @@ public class RedisServiceImpl implements RedisService {
         KV<String, String> kv = KV.of(key, value);
         current = kv;
         return true;
+      } else {
+        if (nextCursor.equals("0")) {
+          return false;
+        }
+        scanResult = jedis.scan(nextCursor, scanParams);
+        nextCursor = scanResult.getStringCursor();
+        keysIterator = scanResult.getResult().iterator();
+        return advance();
       }
-      return false;
     }
 
     @Override
